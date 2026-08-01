@@ -15,10 +15,13 @@
             min-height: 100vh;
             overflow: hidden;
             font-family: sans-serif;
+            touch-action: manipulation; /* Prevents double-tap zoom on mobile */
+            user-select: none;          /* Prevents text highlight when tapping repeatedly */
         }
         canvas {
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -408,13 +411,13 @@ const stems = [
     }
 ];
 
-// Pre-calculate LUTs (Fixed camelCase call)
+// Pre-calculate LUTs
 stems.forEach(stem => {
     stem.lut = precalculateStemBezierLut(stem, 40);
 });
 
 // -----------------------------------------------------------------------------
-// Main Game Loop
+// Main Game Loop & Input Handling
 // -----------------------------------------------------------------------------
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
@@ -429,25 +432,38 @@ let isResetting = false;
 let resetTimer = 0.0;
 let lastTimestamp = performance.now();
 
+// Trigger reset sequence
+function triggerReset() {
+    if (isResetting) return;
+    
+    isResetting = true;
+    resetTimer = 0.0;
+    stems.forEach(stem => {
+        const endPt = stem.end;
+        const color = stem.color;
+        for (let i = 0; i < 5; i++) {
+            driftingPetals.push({
+                x: endPt[0],
+                y: endPt[1],
+                vx: (Math.random() - 0.5) * 120,
+                vy: -Math.random() * 80 - 40,
+                radius: Math.random() * 4 + 6,
+                color: color,
+                alpha: 255
+            });
+        }
+    });
+}
+
+// Global Touch / Pointer Event listener (Triggers anywhere on the window or canvas)
+window.addEventListener('pointerdown', () => {
+    triggerReset();
+});
+
+// Keypress Listener ('R' key)
 window.addEventListener('keydown', (e) => {
-    if ((e.key === 'r' || e.key === 'R') && !isResetting) {
-        isResetting = true;
-        resetTimer = 0.0;
-        stems.forEach(stem => {
-            const endPt = stem.end;
-            const color = stem.color;
-            for (let i = 0; i < 5; i++) {
-                driftingPetals.push({
-                    x: endPt[0],
-                    y: endPt[1],
-                    vx: (Math.random() - 0.5) * 120,
-                    vy: -Math.random() * 80 - 40,
-                    radius: Math.random() * 4 + 6,
-                    color: color,
-                    alpha: 255
-                });
-            }
-        });
+    if (e.key === 'r' || e.key === 'R') {
+        triggerReset();
     }
 });
 
