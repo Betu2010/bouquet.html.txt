@@ -2,40 +2,48 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Animated Flower Bouquet</title>
     <style>
-        body {
-            background-color: #0c0c14;
+        * {
+            box-sizing: border-box;
             margin: 0;
             padding: 0;
+        }
+        body {
+            background-color: #0c0c14;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
+            width: 100vw;
             overflow: hidden;
             font-family: sans-serif;
-            touch-action: manipulation; /* Prevents double-tap zoom on mobile */
-            user-select: none;          /* Prevents text highlight when tapping repeatedly */
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
         }
         canvas {
+            display: block;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             border-radius: 4px;
             cursor: pointer;
+            max-width: 100vw;
+            max-height: 100vh;
+            object-fit: contain;
         }
     </style>
 </head>
 <body>
 
-<canvas id="canvas" width="800" height="800"></canvas>
+<canvas id="canvas"></canvas>
 
 <script>
 // -----------------------------------------------------------------------------
 // Configuration & Master Settings
 // -----------------------------------------------------------------------------
-const WIDTH = 800;
-const HEIGHT = 800;
-const FPS = 60;
+const BASE_WIDTH = 800;
+const BASE_HEIGHT = 800;
 
 // Base Colors
 const GREEN = "rgb(46, 139, 87)";
@@ -54,6 +62,34 @@ const ORANGE = "rgb(255, 140, 0)";
 const BROWN = "rgb(101, 67, 33)";
 
 // -----------------------------------------------------------------------------
+// Responsive & Retina Scaling Setup
+// -----------------------------------------------------------------------------
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let dpr = 1;
+
+function resizeCanvas() {
+    dpr = window.devicePixelRatio || 1;
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+    const size = Math.min(windowWidth, windowHeight);
+
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+
+    // Scale canvas context to maintain standard 800x800 coordinate system
+    ctx.resetTransform();
+    const scale = (size / BASE_WIDTH) * dpr;
+    ctx.scale(scale, scale);
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// -----------------------------------------------------------------------------
 // Optimized Caches & Surfaces
 // -----------------------------------------------------------------------------
 const PETAL_ALPHA_CACHE = new Map();
@@ -68,13 +104,13 @@ function getCachedPetalParticle(radius, color, alpha) {
         const offscreen = document.createElement('canvas');
         offscreen.width = qRadius * 2;
         offscreen.height = qRadius * 2;
-        const ctx = offscreen.getContext('2d');
+        const octx = offscreen.getContext('2d');
         
-        ctx.fillStyle = color;
-        ctx.globalAlpha = qAlpha / 255;
-        ctx.beginPath();
-        ctx.arc(qRadius, qRadius, qRadius, 0, Math.PI * 2);
-        ctx.fill();
+        octx.fillStyle = color;
+        octx.globalAlpha = qAlpha / 255;
+        octx.beginPath();
+        octx.arc(qRadius, qRadius, qRadius, 0, Math.PI * 2);
+        octx.fill();
         
         PETAL_ALPHA_CACHE.set(key, offscreen);
     }
@@ -97,14 +133,14 @@ function getRotatedEllipseSurface(color, width, height, angleDeg) {
         const offscreen = document.createElement('canvas');
         offscreen.width = Math.max(1, bWidth);
         offscreen.height = Math.max(1, bHeight);
-        const ctx = offscreen.getContext('2d');
+        const octx = offscreen.getContext('2d');
 
-        ctx.translate(offscreen.width / 2, offscreen.height / 2);
-        ctx.rotate(rad);
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
-        ctx.fill();
+        octx.translate(offscreen.width / 2, offscreen.height / 2);
+        octx.rotate(rad);
+        octx.fillStyle = color;
+        octx.beginPath();
+        octx.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+        octx.fill();
 
         ROTATED_ELLIPSE_CACHE.set(key, offscreen);
     }
@@ -113,14 +149,14 @@ function getRotatedEllipseSurface(color, width, height, angleDeg) {
 
 function createBackgroundSurface() {
     const bg = document.createElement('canvas');
-    bg.width = WIDTH;
-    bg.height = HEIGHT;
-    const ctx = bg.getContext('2d');
+    bg.width = BASE_WIDTH;
+    bg.height = BASE_HEIGHT;
+    const octx = bg.getContext('2d');
 
-    for (let y = 0; y < HEIGHT; y++) {
-        const c = 12 + Math.floor(18 * y / HEIGHT);
-        ctx.fillStyle = `rgb(${c}, ${c}, ${c + 10})`;
-        ctx.fillRect(0, y, WIDTH, 1);
+    for (let y = 0; y < BASE_HEIGHT; y++) {
+        const c = 12 + Math.floor(18 * y / BASE_HEIGHT);
+        octx.fillStyle = `rgb(${c}, ${c}, ${c + 10})`;
+        octx.fillRect(0, y, BASE_WIDTH, 1);
     }
     return bg;
 }
@@ -129,24 +165,24 @@ function createGlowSurface() {
     const surf = document.createElement('canvas');
     surf.width = 600;
     surf.height = 600;
-    const ctx = surf.getContext('2d');
+    const octx = surf.getContext('2d');
     const center = 300;
     const sigma = 120.0;
 
     for (let r = 280; r > 0; r -= 4) {
         const alpha = Math.floor(35 * Math.exp(-(r * r) / (sigma * sigma)));
         if (alpha > 0) {
-            ctx.fillStyle = `rgba(255, 250, 220, ${alpha / 255})`;
-            ctx.beginPath();
-            ctx.arc(center, center, r, 0, Math.PI * 2);
-            ctx.fill();
+            octx.fillStyle = `rgba(255, 250, 220, ${alpha / 255})`;
+            octx.beginPath();
+            octx.arc(center, center, r, 0, Math.PI * 2);
+            octx.fill();
         }
     }
     return surf;
 }
 
 // -----------------------------------------------------------------------------
-// Math & Normalized Bezier Pre-computation
+// Math & Bezier Pre-computation
 // -----------------------------------------------------------------------------
 function getBloomScale(progress) {
     if (progress <= 0) return 0.0;
@@ -182,13 +218,25 @@ function precalculateStemBezierLut(stem, segments = 40) {
 }
 
 // -----------------------------------------------------------------------------
-// Fast Plant Rendering
+// Fast Plant Rendering & Flower Shadows
 // -----------------------------------------------------------------------------
 function blitRotatedEllipse(ctx, color, centerX, centerY, width, height, angleRad) {
     if (width <= 0 || height <= 0) return;
     const angleDeg = (angleRad * 180) / Math.PI;
     const rotSurf = getRotatedEllipseSurface(color, width, height, angleDeg);
     ctx.drawImage(rotSurf, Math.floor(centerX - rotSurf.width / 2), Math.floor(centerY - rotSurf.height / 2));
+}
+
+// Soft Ambient Shadow beneath Flower Head
+function drawFlowerShadow(ctx, x, y, size, progress) {
+    const scale = getBloomScale(progress);
+    const radius = (size / 1.8) * scale;
+    if (radius <= 0) return;
+
+    ctx.fillStyle = "rgba(10, 20, 15, 0.28)";
+    ctx.beginPath();
+    ctx.ellipse(x + 2, y + 12, radius, radius * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
 }
 
 function drawTulip(ctx, x, y, size, progress, color, baseColor, rotOffset, breathScale, cosR, sinR) {
@@ -375,38 +423,38 @@ function drawLeaf(ctx, x, y, length, angleDeg, progress) {
 const stems = [
     {
         start: [400, 750], ctrl1: [320, 600], ctrl2: [220, 450], end: [260, 320],
-        flower: "pink_tulip", color: PINK, base_color: PINK_BASE, delay: 0.0,
-        sway_amp: 3.2, sway_freq: 2.2, rot_jitter: -3.5, phase_shift: 0.0,
+        flower: "pink_tulip", size: 50, color: PINK, base_color: PINK_BASE, delay: 0.0,
+        sway_amp: 3.2, sway_freq: 2.2, noise_freq: 3.1, noise_amp: 1.2, rot_jitter: -3.5, phase_shift: 0.0,
         leaves: [[0.3, -30, 1.05], [0.5, -150, 0.95], [0.7, -25, 1.0]]
     },
     {
         start: [400, 750], ctrl1: [410, 580], ctrl2: [390, 400], end: [400, 240],
-        flower: "sunflower", color: YELLOW, base_color: YELLOW_BASE, delay: 0.33,
-        sway_amp: 6.5, sway_freq: 1.4, rot_jitter: 2.0, phase_shift: 1.2,
+        flower: "sunflower", size: 80, color: YELLOW, base_color: YELLOW_BASE, delay: 0.8,
+        sway_amp: 6.5, sway_freq: 1.4, noise_freq: 2.3, noise_amp: 1.8, rot_jitter: 2.0, phase_shift: 1.2,
         leaves: [[0.25, -160, 0.9], [0.45, -20, 1.1], [0.65, -145, 1.0]]
     },
     {
         start: [400, 750], ctrl1: [450, 600], ctrl2: [550, 480], end: [580, 340],
-        flower: "white_daisy", color: WHITE, base_color: WHITE_BASE, delay: 0.66,
-        sway_amp: 2.1, sway_freq: 2.8, rot_jitter: 4.5, phase_shift: 2.4,
+        flower: "white_daisy", size: 60, color: WHITE, base_color: WHITE_BASE, delay: 1.6,
+        sway_amp: 2.1, sway_freq: 2.8, noise_freq: 4.0, noise_amp: 0.9, rot_jitter: 4.5, phase_shift: 2.4,
         leaves: [[0.35, -20, 1.0], [0.55, -160, 0.92]]
     },
     {
         start: [400, 750], ctrl1: [350, 620], ctrl2: [300, 500], end: [340, 420],
-        flower: "red_tulip", color: RED, base_color: RED_BASE, delay: 1.0,
-        sway_amp: 3.0, sway_freq: 2.0, rot_jitter: -1.8, phase_shift: 0.8,
+        flower: "red_tulip", size: 45, color: RED, base_color: RED_BASE, delay: 2.4,
+        sway_amp: 3.0, sway_freq: 2.0, noise_freq: 3.4, noise_amp: 1.4, rot_jitter: -1.8, phase_shift: 0.8,
         leaves: [[0.3, -150, 0.98], [0.6, -30, 1.08]]
     },
     {
         start: [400, 750], ctrl1: [430, 620], ctrl2: [480, 520], end: [500, 450],
-        flower: "pink_daisy", color: PINK, base_color: PINK_BASE, delay: 1.33,
-        sway_amp: 2.3, sway_freq: 2.6, rot_jitter: -4.0, phase_shift: 1.9,
+        flower: "pink_daisy", size: 55, color: PINK, base_color: PINK_BASE, delay: 3.2,
+        sway_amp: 2.3, sway_freq: 2.6, noise_freq: 2.9, noise_amp: 1.1, rot_jitter: -4.0, phase_shift: 1.9,
         leaves: [[0.4, -25, 1.04], [0.7, -155, 0.95]]
     },
     {
         start: [400, 750], ctrl1: [480, 580], ctrl2: [620, 450], end: [660, 300],
-        flower: "red_tulip", color: RED, base_color: RED_BASE, delay: 1.66,
-        sway_amp: 3.5, sway_freq: 1.9, rot_jitter: 3.2, phase_shift: 3.1,
+        flower: "red_tulip", size: 45, color: RED, base_color: RED_BASE, delay: 4.0,
+        sway_amp: 3.5, sway_freq: 1.9, noise_freq: 3.7, noise_amp: 1.5, rot_jitter: 3.2, phase_shift: 3.1,
         leaves: [[0.3, -20, 1.0], [0.5, -160, 1.06], [0.72, -15, 0.88]]
     }
 ];
@@ -417,22 +465,19 @@ stems.forEach(stem => {
 });
 
 // -----------------------------------------------------------------------------
-// Main Game Loop & Input Handling
+// Main Loop & Input Logic
 // -----------------------------------------------------------------------------
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-
 const bgSurface = createBackgroundSurface();
 const glowSurf = createGlowSurface();
 
 let time = 0.0;
-const growthRate = 0.9;
+const growthRate = 0.25; // Target growth timing speed
 const driftingPetals = [];
 let isResetting = false;
 let resetTimer = 0.0;
 let lastTimestamp = performance.now();
 
-// Trigger reset sequence
+// Reset Trigger with Organic Radial Offsets
 function triggerReset() {
     if (isResetting) return;
     
@@ -441,12 +486,19 @@ function triggerReset() {
     stems.forEach(stem => {
         const endPt = stem.end;
         const color = stem.color;
-        for (let i = 0; i < 5; i++) {
+        const radiusSpread = stem.size * 0.45;
+
+        for (let i = 0; i < 7; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const offsetDist = Math.random() * radiusSpread;
+            const spawnX = endPt[0] + Math.cos(angle) * offsetDist;
+            const spawnY = endPt[1] + Math.sin(angle) * offsetDist;
+
             driftingPetals.push({
-                x: endPt[0],
-                y: endPt[1],
-                vx: (Math.random() - 0.5) * 120,
-                vy: -Math.random() * 80 - 40,
+                x: spawnX,
+                y: spawnY,
+                vx: Math.cos(angle) * (40 + Math.random() * 80),
+                vy: Math.sin(angle) * 30 - Math.random() * 80 - 30,
                 radius: Math.random() * 4 + 6,
                 color: color,
                 alpha: 255
@@ -455,16 +507,9 @@ function triggerReset() {
     });
 }
 
-// Global Touch / Pointer Event listener (Triggers anywhere on the window or canvas)
-window.addEventListener('pointerdown', () => {
-    triggerReset();
-});
-
-// Keypress Listener ('R' key)
+window.addEventListener('pointerdown', triggerReset);
 window.addEventListener('keydown', (e) => {
-    if (e.key === 'r' || e.key === 'R') {
-        triggerReset();
-    }
+    if (e.key === 'r' || e.key === 'R') triggerReset();
 });
 
 function drawPoly(ctx, pts, fillStyle, strokeStyle = null, lineWidth = 1) {
@@ -481,6 +526,37 @@ function drawPoly(ctx, pts, fillStyle, strokeStyle = null, lineWidth = 1) {
         ctx.lineWidth = lineWidth;
         ctx.stroke();
     }
+}
+
+// Draw Bouquet Wrapping Paper with Gradients & Highlights
+function drawGradedPaper(ctx) {
+    // Main Wrapper Cone Gradient
+    const mainGrad = ctx.createLinearGradient(240, 520, 560, 730);
+    mainGrad.addColorStop(0, "rgb(245, 230, 205)");
+    mainGrad.addColorStop(0.5, "rgb(230, 212, 182)");
+    mainGrad.addColorStop(1, "rgb(205, 185, 155)");
+
+    const mainPaper = [[310, 730], [490, 730], [560, 520], [240, 520]];
+    drawPoly(ctx, mainPaper, mainGrad);
+
+    // Fold Shadow Side
+    const shadowGrad = ctx.createLinearGradient(240, 520, 310, 730);
+    shadowGrad.addColorStop(0, "rgba(180, 160, 130, 0.65)");
+    shadowGrad.addColorStop(1, "rgba(140, 120, 95, 0.85)");
+    
+    const foldPaper = [[240, 520], [310, 730], [270, 520]];
+    drawPoly(ctx, foldPaper, shadowGrad);
+
+    // Inner Fold Crease Highlights
+    ctx.strokeStyle = "rgba(255, 250, 240, 0.6)";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(400, 520); ctx.lineTo(400, 730); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(480, 520); ctx.lineTo(450, 730); ctx.stroke();
+
+    // Top Rim Highlight Rim
+    ctx.strokeStyle = "rgb(255, 248, 230)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(240, 520); ctx.lineTo(560, 520); ctx.stroke();
 }
 
 function gameLoop(currentTimestamp) {
@@ -500,11 +576,11 @@ function gameLoop(currentTimestamp) {
         }
     }
 
-    // Clear Screen and draw Pre-baked Render Buffers
+    // Background and Bloom Glow
     ctx.drawImage(bgSurface, 0, 0);
     ctx.drawImage(glowSurf, 100, 150);
 
-    // Grass blades
+    // Background Grass blades
     for (let i = -5; i <= 5; i++) {
         const lx = 400 + i * 15;
         const grassSway = globalWind * 0.5 + Math.sin(time * 1.5 + i) * 2.0;
@@ -515,19 +591,8 @@ function gameLoop(currentTimestamp) {
         ctx.stroke();
     }
 
-    // Bouquet wrapping
-    const paper = [[310, 730], [490, 730], [560, 520], [240, 520]];
-    drawPoly(ctx, paper, "rgb(235, 220, 190)");
-    drawPoly(ctx, [[240, 520], [310, 730], [270, 520]], "rgb(215, 200, 170)");
-
-    ctx.strokeStyle = "rgb(210, 195, 165)";
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(400, 520); ctx.lineTo(400, 730); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(480, 520); ctx.lineTo(450, 730); ctx.stroke();
-
-    ctx.strokeStyle = "rgb(255, 245, 220)";
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(240, 520); ctx.lineTo(560, 520); ctx.stroke();
+    // Render Bouquet Wrapped Paper
+    drawGradedPaper(ctx);
 
     if (!isResetting) {
         stems.forEach((stem, stemIdx) => {
@@ -537,11 +602,14 @@ function gameLoop(currentTimestamp) {
             const t = Math.min(1.0, (time - startTime) * growthRate);
             const smoothT = t * t * (3 - 2 * t);
 
-            const stemWind = globalWind + Math.sin(time * stem.sway_freq + stem.phase_shift) * stem.sway_amp;
+            // Per-Stem Unique Turbulence Wind Calculation
+            const stemTurbulence = Math.sin(time * stem.noise_freq + stemIdx * 1.7) * stem.noise_amp;
+            const stemWind = globalWind + Math.sin(time * stem.sway_freq + stem.phase_shift) * stem.sway_amp + stemTurbulence;
+            
             const lut = stem.lut;
             const maxIdx = Math.floor(smoothT * (lut.length - 1));
 
-            // Stems
+            // Stems Rendering
             if (maxIdx >= 1) {
                 const entry0 = lut[0];
                 let prevX = entry0.base_x + stemWind * entry0.wind_weight;
@@ -567,7 +635,7 @@ function gameLoop(currentTimestamp) {
                 }
             }
 
-            // Leaves
+            // Leaves Rendering
             stem.leaves.forEach(([leafPct, leafAngle, leafScale]) => {
                 if (smoothT > leafPct) {
                     const leafProgress = Math.min(1.0, (smoothT - leafPct) / 0.3);
@@ -580,9 +648,9 @@ function gameLoop(currentTimestamp) {
                 }
             });
 
-            // Flowers
-            if (smoothT >= 0.8) {
-                const bloomProgress = Math.min(1.0, (smoothT - 0.8) / 0.2);
+            // Flowers Rendering
+            if (smoothT >= 0.65) {
+                const bloomProgress = Math.min(1.0, (smoothT - 0.65) / 0.35);
                 const endEntry = lut[lut.length - 1];
                 const endX = endEntry.base_x + stemWind * endEntry.wind_weight;
                 const endY = endEntry.base_y;
@@ -591,24 +659,25 @@ function gameLoop(currentTimestamp) {
                 const rotJ = stem.rot_jitter + stemWind * 0.4;
                 const breathScale = 1.0 + 0.018 * Math.sin(time * 2.5 + stemIdx);
 
+                // Draw ambient head shadow behind flower
+                drawFlowerShadow(ctx, endX, endY, stem.size, bloomProgress);
+
                 if (fType === "pink_tulip" || fType === "red_tulip") {
                     const rotRad = (rotJ * Math.PI) / 180;
                     const cosR = Math.cos(rotRad), sinR = Math.sin(rotRad);
-                    const c = (fType === "pink_tulip") ? PINK : RED;
-                    const sz = (fType === "pink_tulip") ? 50 : 45;
-                    drawTulip(ctx, endX, endY, sz, bloomProgress, c, stem.base_color, rotJ, breathScale, cosR, sinR);
+                    drawTulip(ctx, endX, endY, stem.size, bloomProgress, stem.color, stem.base_color, rotJ, breathScale, cosR, sinR);
                 } else if (fType === "white_daisy") {
-                    drawDaisy(ctx, endX, endY, 60, bloomProgress, WHITE, stem.base_color, YELLOW, rotJ, breathScale);
+                    drawDaisy(ctx, endX, endY, stem.size, bloomProgress, WHITE, stem.base_color, YELLOW, rotJ, breathScale);
                 } else if (fType === "pink_daisy") {
-                    drawDaisy(ctx, endX, endY, 55, bloomProgress, PINK, stem.base_color, YELLOW, rotJ, breathScale);
+                    drawDaisy(ctx, endX, endY, stem.size, bloomProgress, PINK, stem.base_color, YELLOW, rotJ, breathScale);
                 } else if (fType === "sunflower") {
-                    drawSunflower(ctx, endX, endY, 80, bloomProgress, rotJ, breathScale);
+                    drawSunflower(ctx, endX, endY, stem.size, bloomProgress, rotJ, breathScale);
                 }
             }
         });
     }
 
-    // Particles & spores
+    // Resetting Explosive Drifting Petals Particle Animation
     if (isResetting) {
         driftingPetals.forEach(p => {
             p.x += p.vx * dt;
@@ -623,8 +692,9 @@ function gameLoop(currentTimestamp) {
         });
     }
 
+    // Floating Ambient Spores
     for (let p = 0; p < 12; p++) {
-        const px = (400 + Math.sin(time * 0.8 + p * 1.5) * 280) % WIDTH;
+        const px = (400 + Math.sin(time * 0.8 + p * 1.5) * 280) % BASE_WIDTH;
         const py = (700 - ((time * 25 + p * 60) % 500));
         const pAlpha = Math.max(0, Math.min(255, Math.floor(120 + 100 * Math.sin(time * 2 + p))));
 
@@ -632,7 +702,7 @@ function gameLoop(currentTimestamp) {
         ctx.drawImage(sporeSurf, Math.floor(px), Math.floor(py));
     }
 
-    // Ribbon
+    // Bouquet Red Ribbon
     const ribbonWaveLeft = globalWind * 0.6 + Math.sin(time * 4.0) * 2.0;
     const ribbonWaveRight = globalWind * 0.6 + Math.cos(time * 4.0) * 2.0;
 
